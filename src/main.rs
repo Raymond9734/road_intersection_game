@@ -16,9 +16,10 @@ const VEHICLE_HEIGHT: u32 = 20;
 const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
 const MIN_VEHICLE_DISTANCE: i32 = 30;
-const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(1000);
-const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(10);
+const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(500);
+// const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(8);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
+const MAX_GREEN_TIME: Duration = Duration::from_secs(8);
 
 // Directions
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -48,6 +49,7 @@ struct TrafficLight {
     position: Point,
     state: TrafficLightState,
     direction: Direction,
+    last_change: Instant,
 }
 
 struct Vehicle {
@@ -63,49 +65,46 @@ struct TrafficSystem {
     vehicles: Vec<Vehicle>,
     traffic_lights: Vec<TrafficLight>,
     last_spawn_time: Instant,
-    traffic_light_switch_time: Instant,
-    current_ns_light_state: TrafficLightState,
-    current_ew_light_state: TrafficLightState,
 }
 
 impl TrafficSystem {
     fn new() -> Self {
         let traffic_lights = vec![
-            // North (bottom-left corner, controls North-bound vehicles)
             TrafficLight {
                 position: Point::new(
-                    (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET, // x=335
-                    WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2, // y=345
+                    (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET,
+                    WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2,
                 ),
                 state: TrafficLightState::Red,
                 direction: Direction::North,
+                last_change: Instant::now(),
             },
-            // South (top-right corner, controls South-bound vehicles)
             TrafficLight {
                 position: Point::new(
-                    WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2, // x=445
-                    (WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET, // y=235
+                    WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2,
+                    (WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET,
                 ),
                 state: TrafficLightState::Red,
                 direction: Direction::South,
+                last_change: Instant::now(),
             },
-            // East (top-left corner, controls East-bound vehicles)
             TrafficLight {
                 position: Point::new(
-                    (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET, // x=335
-                    (WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET, // y=235
+                    (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET,
+                    (WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2) - TRAFFIC_LIGHT_POS_OFFSET,
                 ),
                 state: TrafficLightState::Green,
                 direction: Direction::East,
+                last_change: Instant::now(),
             },
-            // West (bottom-right corner, controls West-bound vehicles)
             TrafficLight {
                 position: Point::new(
-                    WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2, // x=445
-                    WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2, // y=345
+                    WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2,
+                    WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2,
                 ),
-                state: TrafficLightState::Green,
+                state: TrafficLightState::Red,
                 direction: Direction::West,
+                last_change: Instant::now(),
             },
         ];
 
@@ -113,33 +112,102 @@ impl TrafficSystem {
             vehicles: Vec::new(),
             traffic_lights,
             last_spawn_time: Instant::now(),
-            traffic_light_switch_time: Instant::now(),
-            current_ns_light_state: TrafficLightState::Red,
-            current_ew_light_state: TrafficLightState::Green,
         }
     }
 
     fn update_traffic_lights(&mut self) {
-        if self.traffic_light_switch_time.elapsed() >= TRAFFIC_LIGHT_CYCLE {
-            self.current_ns_light_state = match self.current_ns_light_state {
-                TrafficLightState::Red => TrafficLightState::Green,
-                TrafficLightState::Green => TrafficLightState::Red,
-            };
-            self.current_ew_light_state = match self.current_ew_light_state {
-                TrafficLightState::Red => TrafficLightState::Green,
-                TrafficLightState::Green => TrafficLightState::Red,
-            };
-
-            for light in &mut self.traffic_lights {
-                match light.direction {
-                    Direction::North | Direction::South => {
-                        light.state = self.current_ns_light_state
+        // Count waiting vehicles per direction
+        let mut vehicle_counts = [
+            (Direction::North, 0),
+            (Direction::South, 0),
+            (Direction::East, 0),
+            (Direction::West, 0),
+        ];
+        for vehicle in &self.vehicles {
+            if !vehicle.has_passed_intersection {
+                match vehicle.direction {
+                    Direction::North => {
+                        let stop_y = (WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                        if vehicle.position.y >= stop_y {
+                            vehicle_counts[0].1 += 1;
+                        }
                     }
-                    Direction::East | Direction::West => light.state = self.current_ew_light_state,
+                    Direction::South => {
+                        let stop_y = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2;
+                        if vehicle.position.y <= stop_y {
+                            vehicle_counts[1].1 += 1;
+                        }
+                    }
+                    Direction::East => {
+                        let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                        if vehicle.position.x <= stop_x {
+                            vehicle_counts[2].1 += 1;
+                        }
+                    }
+                    Direction::West => {
+                        let stop_x = (WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                        if vehicle.position.x >= stop_x {
+                            vehicle_counts[3].1 += 1;
+                        }
+                    }
                 }
             }
+        }
 
-            self.traffic_light_switch_time = Instant::now();
+        // Find current green light and check if it should change
+        let mut current_green_idx = None;
+        let mut should_change = false;
+        let mut next_direction = None;
+        let mut max_vehicles = 0;
+
+        for (i, light) in self.traffic_lights.iter().enumerate() {
+            if light.state == TrafficLightState::Green {
+                current_green_idx = Some(i);
+                let elapsed = light.last_change.elapsed();
+                let current_dir = light.direction;
+                let current_lane_vehicles = vehicle_counts
+                    .iter()
+                    .find(|&&(dir, _)| dir == current_dir)
+                    .map(|&(_, count)| count)
+                    .unwrap_or(0);
+
+                // Change if max time reached or no vehicles in current lane
+                should_change = elapsed >= MAX_GREEN_TIME || current_lane_vehicles == 0;
+            }
+
+            // Find direction with most vehicles
+            for &(dir, count) in &vehicle_counts {
+                if count > max_vehicles {
+                    max_vehicles = count;
+                    next_direction = Some(dir);
+                }
+            }
+        }
+
+        if should_change {
+            let current_idx = current_green_idx.unwrap_or(0);
+            let next_idx = if max_vehicles > 0 {
+                // Choose direction with most vehicles
+                let target_dir = next_direction.unwrap_or(Direction::North);
+                self.traffic_lights
+                    .iter()
+                    .position(|light| light.direction == target_dir)
+                    .unwrap_or((current_idx + 1) % 4)
+            } else {
+                // Cycle to next light if no vehicles
+                (current_idx + 1) % 4
+            };
+
+            // Update lights
+            for (i, light) in self.traffic_lights.iter_mut().enumerate() {
+                if i == next_idx {
+                    light.state = TrafficLightState::Green;
+                    light.last_change = Instant::now();
+                } else {
+                    light.state = TrafficLightState::Red;
+                    light.last_change = Instant::now();
+                }
+            }
         }
     }
 
@@ -178,9 +246,9 @@ impl TrafficSystem {
         let route = options[rng.gen_range(0..3)];
 
         let color = match route {
-            Route::Straight => Color::RGB(0, 0, 255), // Blue
-            Route::Left => Color::RGB(255, 0, 0),     // Red
-            Route::Right => Color::RGB(255, 255, 0),  // Yellow
+            Route::Straight => Color::RGB(0, 0, 255),
+            Route::Left => Color::RGB(255, 0, 0),
+            Route::Right => Color::RGB(255, 255, 0),
         };
 
         let position = match direction {
@@ -307,31 +375,36 @@ impl TrafficSystem {
                 if vehicle.has_passed_intersection {
                     false
                 } else {
-                    match vehicle.direction {
-                        Direction::North => {
-                            let stop_y = (WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5; // y=345
-                            vehicle.position.y >= stop_y
-                                && vehicle.position.y <= stop_y + 5
-                                && self.current_ns_light_state == TrafficLightState::Red
+                    let light_state = self
+                        .traffic_lights
+                        .iter()
+                        .find(|light| light.direction == vehicle.direction)
+                        .map(|light| light.state)
+                        .unwrap_or(TrafficLightState::Red);
+
+                    if light_state != TrafficLightState::Green {
+                        match vehicle.direction {
+                            Direction::North => {
+                                let stop_y = (WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                                vehicle.position.y >= stop_y && vehicle.position.y <= stop_y + 5
+                            }
+                            Direction::South => {
+                                let stop_y = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2;
+                                vehicle.position.y >= stop_y - VEHICLE_HEIGHT as i32
+                                    && vehicle.position.y <= stop_y - VEHICLE_HEIGHT as i32 + 5
+                            }
+                            Direction::East => {
+                                let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                                vehicle.position.x >= stop_x - VEHICLE_WIDTH as i32
+                                    && vehicle.position.x <= stop_x - VEHICLE_WIDTH as i32 + 5
+                            }
+                            Direction::West => {
+                                let stop_x = (WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                                vehicle.position.x >= stop_x && vehicle.position.x <= stop_x + 5
+                            }
                         }
-                        Direction::South => {
-                            let stop_y = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2; // y=255
-                            vehicle.position.y >= stop_y - VEHICLE_HEIGHT as i32
-                                && vehicle.position.y <= stop_y - VEHICLE_HEIGHT as i32 + 5
-                                && self.current_ns_light_state == TrafficLightState::Red
-                        }
-                        Direction::East => {
-                            let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5; // x=355
-                            vehicle.position.x >= stop_x - VEHICLE_WIDTH as i32
-                                && vehicle.position.x <= stop_x - VEHICLE_WIDTH as i32 + 5
-                                && self.current_ew_light_state == TrafficLightState::Red
-                        }
-                        Direction::West => {
-                            let stop_x = (WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5; // x=445
-                            vehicle.position.x >= stop_x
-                                && vehicle.position.x <= stop_x + 5
-                                && self.current_ew_light_state == TrafficLightState::Red
-                        }
+                    } else {
+                        false
                     }
                 }
             };
