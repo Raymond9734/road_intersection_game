@@ -16,10 +16,10 @@ const VEHICLE_HEIGHT: u32 = 20;
 const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
 const MIN_VEHICLE_DISTANCE: i32 = 30;
-const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(500);
+const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(800);
 // const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(8);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
-const MAX_GREEN_TIME: Duration = Duration::from_secs(8);
+const MAX_GREEN_TIME: Duration = Duration::from_secs(6);
 
 // Directions
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -154,6 +154,9 @@ impl TrafficSystem {
             }
         }
 
+        // Sum total vehicles
+        let total_vehicles: u32 = vehicle_counts.iter().map(|&(_, count)| count).sum();
+
         // Find current green light and check if it should change
         let mut current_green_idx = None;
         let mut should_change = false;
@@ -184,18 +187,31 @@ impl TrafficSystem {
             }
         }
 
-        if should_change {
-            let current_idx = current_green_idx.unwrap_or(0);
-            let next_idx = if max_vehicles > 0 {
-                // Choose direction with most vehicles
+        if total_vehicles == 0 {
+            // Set all lights to red if no vehicles
+            for light in self.traffic_lights.iter_mut() {
+                light.state = TrafficLightState::Red;
+                light.last_change = Instant::now();
+            }
+        } else {
+            let next_idx = if let Some(idx) = current_green_idx {
+                if should_change {
+                    // Choose direction with most vehicles
+                    let target_dir = next_direction.unwrap_or(Direction::North);
+                    self.traffic_lights
+                        .iter()
+                        .position(|light| light.direction == target_dir)
+                        .unwrap_or((idx + 1) % 4)
+                } else {
+                    idx // Keep current green if no change needed
+                }
+            } else {
+                // No green light, choose direction with vehicles
                 let target_dir = next_direction.unwrap_or(Direction::North);
                 self.traffic_lights
                     .iter()
                     .position(|light| light.direction == target_dir)
-                    .unwrap_or((current_idx + 1) % 4)
-            } else {
-                // Cycle to next light if no vehicles
-                (current_idx + 1) % 4
+                    .unwrap_or(0)
             };
 
             // Update lights
@@ -210,7 +226,6 @@ impl TrafficSystem {
             }
         }
     }
-
     fn spawn_vehicle(&mut self, direction: Direction) {
         if self.last_spawn_time.elapsed() < VEHICLE_SPAWN_COOLDOWN {
             return;
