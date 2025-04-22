@@ -157,32 +157,56 @@ impl TrafficSystem {
         // Sum total vehicles
         let total_vehicles: u32 = vehicle_counts.iter().map(|&(_, count)| count).sum();
 
-        // Find current green light and check if it should change
+        // Find current green light and check conditions
         let mut current_green_idx = None;
         let mut should_change = false;
-        let mut next_direction = None;
-        let mut max_vehicles = 0;
+        let mut priority_direction = None;
 
-        for (i, light) in self.traffic_lights.iter().enumerate() {
-            if light.state == TrafficLightState::Green {
-                current_green_idx = Some(i);
-                let elapsed = light.last_change.elapsed();
-                let current_dir = light.direction;
-                let current_lane_vehicles = vehicle_counts
-                    .iter()
-                    .find(|&&(dir, _)| dir == current_dir)
-                    .map(|&(_, count)| count)
-                    .unwrap_or(0);
-
-                // Change if max time reached or no vehicles in current lane
-                should_change = elapsed >= MAX_GREEN_TIME || current_lane_vehicles == 0;
+        // Check for priority condition: lane with >= 5 cars while another has < 3
+        for &(dir, count) in &vehicle_counts {
+            if count >= 5 {
+                // Check if there's a green light in another lane with < 3 cars
+                for light in &self.traffic_lights {
+                    if light.state == TrafficLightState::Green && light.direction != dir {
+                        let current_lane_count = vehicle_counts
+                            .iter()
+                            .find(|&&(d, _)| d == light.direction)
+                            .map(|&(_, count)| count)
+                            .unwrap_or(0);
+                        if current_lane_count < 3 {
+                            priority_direction = Some(dir);
+                            should_change = true;
+                            break;
+                        }
+                    }
+                }
             }
+        }
 
-            // Find direction with most vehicles
+        // If no priority condition, find lane with most vehicles
+        if priority_direction.is_none() {
+            let mut max_vehicles = 0;
             for &(dir, count) in &vehicle_counts {
                 if count > max_vehicles {
                     max_vehicles = count;
-                    next_direction = Some(dir);
+                    priority_direction = Some(dir);
+                }
+            }
+
+            // Check if current green light should change
+            for (i, light) in self.traffic_lights.iter().enumerate() {
+                if light.state == TrafficLightState::Green {
+                    current_green_idx = Some(i);
+                    let elapsed = light.last_change.elapsed();
+                    let current_dir = light.direction;
+                    let current_lane_vehicles = vehicle_counts
+                        .iter()
+                        .find(|&&(dir, _)| dir == current_dir)
+                        .map(|&(_, count)| count)
+                        .unwrap_or(0);
+
+                    // Change if max time reached or no vehicles in current lane
+                    should_change = elapsed >= MAX_GREEN_TIME || current_lane_vehicles == 0;
                 }
             }
         }
@@ -196,8 +220,8 @@ impl TrafficSystem {
         } else {
             let next_idx = if let Some(idx) = current_green_idx {
                 if should_change {
-                    // Choose direction with most vehicles
-                    let target_dir = next_direction.unwrap_or(Direction::North);
+                    // Choose priority direction or direction with most vehicles
+                    let target_dir = priority_direction.unwrap_or(Direction::North);
                     self.traffic_lights
                         .iter()
                         .position(|light| light.direction == target_dir)
@@ -206,8 +230,8 @@ impl TrafficSystem {
                     idx // Keep current green if no change needed
                 }
             } else {
-                // No green light, choose direction with vehicles
-                let target_dir = next_direction.unwrap_or(Direction::North);
+                // No green light, choose priority direction or direction with vehicles
+                let target_dir = priority_direction.unwrap_or(Direction::North);
                 self.traffic_lights
                     .iter()
                     .position(|light| light.direction == target_dir)
