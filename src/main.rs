@@ -343,6 +343,21 @@ impl TrafficSystem {
             .map(|v| (v.position, v.direction, v.has_passed_intersection))
             .collect();
 
+        // Define intersection bounds
+        let intersection_left = WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2;
+        let intersection_right = WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2;
+        let intersection_top = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2;
+        let intersection_bottom = WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2;
+
+        let is_in_intersection = |pos: Point| {
+            let vehicle_center_x = pos.x + VEHICLE_WIDTH as i32 / 2;
+            let vehicle_center_y = pos.y + VEHICLE_HEIGHT as i32 / 2;
+            vehicle_center_x > intersection_left
+                && vehicle_center_x < intersection_right
+                && vehicle_center_y > intersection_top
+                && vehicle_center_y < intersection_bottom
+        };
+
         for i in 0..vehicle_count {
             let vehicle = &mut self.vehicles[i];
 
@@ -410,45 +425,57 @@ impl TrafficSystem {
                 stop
             };
 
-            let should_stop_at_light = {
-                if vehicle.has_passed_intersection {
-                    false
-                } else {
-                    let light_state = self
-                        .traffic_lights
-                        .iter()
-                        .find(|light| light.direction == vehicle.direction)
-                        .map(|light| light.state)
-                        .unwrap_or(TrafficLightState::Red);
+            let light_state = self
+                .traffic_lights
+                .iter()
+                .find(|light| light.direction == vehicle.direction)
+                .map(|light| light.state)
+                .unwrap_or(TrafficLightState::Red);
 
-                    if light_state != TrafficLightState::Green {
-                        match vehicle.direction {
-                            Direction::North => {
-                                let stop_y = (WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
-                                vehicle.position.y >= stop_y && vehicle.position.y <= stop_y + 5
-                            }
-                            Direction::South => {
-                                let stop_y = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2;
-                                vehicle.position.y >= stop_y - VEHICLE_HEIGHT as i32
-                                    && vehicle.position.y <= stop_y - VEHICLE_HEIGHT as i32 + 5
-                            }
-                            Direction::East => {
-                                let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
-                                vehicle.position.x >= stop_x - VEHICLE_WIDTH as i32
-                                    && vehicle.position.x <= stop_x - VEHICLE_WIDTH as i32 + 5
-                            }
-                            Direction::West => {
-                                let stop_x = (WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
-                                vehicle.position.x >= stop_x && vehicle.position.x <= stop_x + 5
-                            }
-                        }
-                    } else {
-                        false
-                    }
+            let at_stop_line = match vehicle.direction {
+                Direction::North => {
+                    let stop_y = (WINDOW_HEIGHT as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                    vehicle.position.y >= stop_y && vehicle.position.y <= stop_y + 5
+                }
+                Direction::South => {
+                    let stop_y = WINDOW_HEIGHT as i32 / 2 - ROAD_WIDTH as i32 / 2;
+                    vehicle.position.y >= stop_y - VEHICLE_HEIGHT as i32
+                        && vehicle.position.y <= stop_y - VEHICLE_HEIGHT as i32 + 5
+                }
+                Direction::East => {
+                    let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                    vehicle.position.x >= stop_x - VEHICLE_WIDTH as i32
+                        && vehicle.position.x <= stop_x - VEHICLE_WIDTH as i32 + 5
+                }
+                Direction::West => {
+                    let stop_x = (WINDOW_WIDTH as i32 / 2 + ROAD_WIDTH as i32 / 2) - 5;
+                    vehicle.position.x >= stop_x && vehicle.position.x <= stop_x + 5
                 }
             };
 
-            if !should_stop_at_light && !should_stop_for_vehicle {
+            let should_stop_at_light =
+                if !vehicle.has_passed_intersection && light_state != TrafficLightState::Green {
+                    at_stop_line
+                } else {
+                    false
+                };
+
+            let should_wait_for_intersection_clear =
+                if at_stop_line && light_state == TrafficLightState::Green {
+                    vehicle_positions
+                        .iter()
+                        .enumerate()
+                        .any(|(j, (pos, dir, _))| {
+                            j != i && *dir != vehicle.direction && is_in_intersection(*pos)
+                        })
+                } else {
+                    false
+                };
+
+            if !should_stop_at_light
+                && !should_stop_for_vehicle
+                && !should_wait_for_intersection_clear
+            {
                 let intersection_center_x = WINDOW_WIDTH as i32 / 2;
                 let intersection_center_y = WINDOW_HEIGHT as i32 / 2;
 
