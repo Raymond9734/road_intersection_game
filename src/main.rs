@@ -478,7 +478,6 @@ impl TrafficSystem {
             {
                 let intersection_center_x = WINDOW_WIDTH as i32 / 2;
                 let intersection_center_y = WINDOW_HEIGHT as i32 / 2;
-
                 if !vehicle.has_passed_intersection {
                     match vehicle.direction {
                         Direction::North => {
@@ -487,12 +486,12 @@ impl TrafficSystem {
                             }
                         }
                         Direction::South => {
-                            if vehicle.position.y >= intersection_center_y {
+                            if vehicle.position.y >= intersection_center_y - 30 {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
                         Direction::East => {
-                            if vehicle.position.x >= intersection_center_x {
+                            if vehicle.position.x >= intersection_center_x - 30 {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
@@ -534,7 +533,8 @@ impl TrafficSystem {
                             }
                         }
                         (Direction::South, Route::Left) => {
-                            if vehicle.position.y >= intersection_center_y {
+                            let stop_y = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                            if vehicle.position.y + VEHICLE_WIDTH as i32 >= stop_y - 5 {
                                 vehicle.direction = Direction::East;
                                 vehicle.position = Point::new(
                                     intersection_center_x + ROAD_WIDTH as i32 / 4
@@ -559,7 +559,8 @@ impl TrafficSystem {
                             }
                         }
                         (Direction::East, Route::Left) => {
-                            if vehicle.position.x >= intersection_center_x {
+                            let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                            if vehicle.position.x + VEHICLE_WIDTH as i32 >= stop_x - 5 {
                                 vehicle.direction = Direction::North;
                                 vehicle.position = Point::new(
                                     intersection_center_x
@@ -573,7 +574,8 @@ impl TrafficSystem {
                             }
                         }
                         (Direction::East, Route::Right) => {
-                            if vehicle.position.x >= intersection_center_x {
+                            let stop_x = (WINDOW_WIDTH as i32 / 2 - ROAD_WIDTH as i32 / 2) - 5;
+                            if vehicle.position.x + VEHICLE_WIDTH as i32 >= stop_x - 5 {
                                 vehicle.direction = Direction::South;
                                 vehicle.position = Point::new(
                                     intersection_center_x + ROAD_WIDTH as i32 / 4
