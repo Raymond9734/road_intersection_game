@@ -10,13 +10,13 @@ use std::time::{Duration, Instant};
 // Constants
 const WINDOW_WIDTH: u32 = 900;
 const WINDOW_HEIGHT: u32 = 800;
-const ROAD_WIDTH: u32 = 80;
+const ROAD_WIDTH: u32 = 70;
 const VEHICLE_WIDTH: u32 = 30;
 const VEHICLE_HEIGHT: u32 = 30;
 const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
-const MIN_VEHICLE_DISTANCE: i32 = 30;
-const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(800);
+const MIN_VEHICLE_DISTANCE: i32 = 50;
+const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(1000);
 // const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(8);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
 const MAX_GREEN_TIME: Duration = Duration::from_secs(4);
