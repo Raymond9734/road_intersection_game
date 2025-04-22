@@ -8,18 +8,18 @@ use sdl2::video::Window;
 use std::time::{Duration, Instant};
 
 // Constants
-const WINDOW_WIDTH: u32 = 800;
-const WINDOW_HEIGHT: u32 = 600;
-const ROAD_WIDTH: u32 = 90;
-const VEHICLE_WIDTH: u32 = 15;
-const VEHICLE_HEIGHT: u32 = 20;
+const WINDOW_WIDTH: u32 = 900;
+const WINDOW_HEIGHT: u32 = 800;
+const ROAD_WIDTH: u32 = 80;
+const VEHICLE_WIDTH: u32 = 30;
+const VEHICLE_HEIGHT: u32 = 30;
 const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
 const MIN_VEHICLE_DISTANCE: i32 = 30;
 const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(800);
 // const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(8);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
-const MAX_GREEN_TIME: Duration = Duration::from_secs(6);
+const MAX_GREEN_TIME: Duration = Duration::from_secs(4);
 
 // Directions
 #[derive(Debug, Clone, Copy, PartialEq)]
