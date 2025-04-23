@@ -210,13 +210,13 @@ project/
 Defined in `Cargo.toml`:
 ```toml
 [package]
-name = "traffic-intersection-simulation"
+name = "road_intersection"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-sdl2 = { version = "0.35", features = ["image"] }
-rand = "0.8"
+sdl2 = { version = "0.37", features = ["image"] }
+rand = "0.8.4"
 ```
 - **sdl2**: Handles window creation, rendering, and PNG texture loading.
 - **rand**: Generates random directions and routes for vehicles.
