@@ -741,10 +741,10 @@ fn main() -> Result<(), String> {
                     ..
                 } => match keycode {
                     Keycode::Escape => break 'running,
-                    Keycode::Up => traffic_system.spawn_vehicle(Direction::South),
-                    Keycode::Down => traffic_system.spawn_vehicle(Direction::North),
-                    Keycode::Left => traffic_system.spawn_vehicle(Direction::East),
-                    Keycode::Right => traffic_system.spawn_vehicle(Direction::West),
+                    Keycode::Up => traffic_system.spawn_vehicle(Direction::North),
+                    Keycode::Down => traffic_system.spawn_vehicle(Direction::South),
+                    Keycode::Left => traffic_system.spawn_vehicle(Direction::West),
+                    Keycode::Right => traffic_system.spawn_vehicle(Direction::East),
                     Keycode::R => traffic_system.spawn_random_vehicle(),
                     Keycode::P => paused = !paused,
                     _ => {}
