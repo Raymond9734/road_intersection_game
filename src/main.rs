@@ -17,9 +17,9 @@ const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
 const MIN_VEHICLE_DISTANCE: i32 = 50;
 const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(1000);
-// const TRAFFIC_LIGHT_CYCLE: Duration = Duration::from_secs(8);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
 const MAX_GREEN_TIME: Duration = Duration::from_secs(4);
+const TURN_OFFSET: i32 = 30;
 
 // Directions
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -481,22 +481,43 @@ impl TrafficSystem {
                 if !vehicle.has_passed_intersection {
                     match vehicle.direction {
                         Direction::North => {
-                            if vehicle.position.y <= intersection_center_y {
+                            if vehicle.route == Route::Right
+                                && vehicle.position.y <= intersection_center_y - TURN_OFFSET
+                            {
+                                vehicle.has_passed_intersection = true;
+                            } else if (vehicle.route == Route::Left
+                                || vehicle.route == Route::Straight)
+                                && vehicle.position.y <= intersection_center_y
+                            {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
                         Direction::South => {
-                            if vehicle.position.y >= intersection_center_y - 30 {
+                            if vehicle.position.y >= intersection_center_y - TURN_OFFSET {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
                         Direction::East => {
-                            if vehicle.position.x >= intersection_center_x - 30 {
+                            if vehicle.route == Route::Right
+                                && vehicle.position.x >= intersection_center_x
+                            {
+                                vehicle.has_passed_intersection = true;
+                            } else if (vehicle.route == Route::Left
+                                || vehicle.route == Route::Straight)
+                                && vehicle.position.x >= intersection_center_x - TURN_OFFSET
+                            {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
                         Direction::West => {
-                            if vehicle.position.x <= intersection_center_x {
+                            if vehicle.route == Route::Left
+                                && vehicle.position.x <= intersection_center_x
+                            {
+                                vehicle.has_passed_intersection = true;
+                            } else if (vehicle.route == Route::Right
+                                || vehicle.route == Route::Straight)
+                                && vehicle.position.x <= intersection_center_x - TURN_OFFSET
+                            {
                                 vehicle.has_passed_intersection = true;
                             }
                         }
