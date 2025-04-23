@@ -107,7 +107,7 @@ project/
 1. **Clone or Download the Repository**:
    ```bash
    git clone <repository-url>
-   cd traffic-intersection-simulation
+   cd <repository name>
    ```
    Alternatively, download the source code as a ZIP and extract it.
 
