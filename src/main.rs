@@ -33,7 +33,7 @@ enum Direction {
 }
 
 // Route types
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Route {
     Straight,
     Left,
@@ -66,7 +66,7 @@ struct TrafficSystem<'a> {
     vehicles: Vec<Vehicle>,
     traffic_lights: Vec<TrafficLight>,
     last_spawn_time: Instant,
-    vehicle_textures: HashMap<Direction, Texture<'a>>,
+    vehicle_textures: HashMap<(Direction, Route), Texture<'a>>, // Updated to store Direction and Route
     traffic_light_textures: HashMap<TrafficLightState, Texture<'a>>,
 }
 
@@ -111,32 +111,40 @@ impl<'a> TrafficSystem<'a> {
             },
         ];
 
-        // Load vehicle textures
+        // Load vehicle textures for each Direction and Route combination
         let mut vehicle_textures = HashMap::new();
-        vehicle_textures.insert(
+        let directions = [
             Direction::North,
-            texture_creator
-                .load_texture(Path::new("assets/vehicles/car_north.png"))
-                .map_err(|e| e.to_string())?,
-        );
-        vehicle_textures.insert(
             Direction::South,
-            texture_creator
-                .load_texture(Path::new("assets/vehicles/car_south.png"))
-                .map_err(|e| e.to_string())?,
-        );
-        vehicle_textures.insert(
             Direction::East,
-            texture_creator
-                .load_texture(Path::new("assets/vehicles/car_east.png"))
-                .map_err(|e| e.to_string())?,
-        );
-        vehicle_textures.insert(
             Direction::West,
-            texture_creator
-                .load_texture(Path::new("assets/vehicles/car_west.png"))
-                .map_err(|e| e.to_string())?,
-        );
+        ];
+        let routes = [Route::Straight, Route::Left, Route::Right];
+
+        for &direction in &directions {
+            for &route in &routes {
+                let texture_path = match (direction, route) {
+                    (Direction::North, Route::Straight) => "assets/vehicles/car_north_straight.png",
+                    (Direction::North, Route::Left) => "assets/vehicles/car_north_left.png",
+                    (Direction::North, Route::Right) => "assets/vehicles/car_north_right.png",
+                    (Direction::South, Route::Straight) => "assets/vehicles/car_south_straight.png",
+                    (Direction::South, Route::Left) => "assets/vehicles/car_south_left.png",
+                    (Direction::South, Route::Right) => "assets/vehicles/car_south_right.png",
+                    (Direction::East, Route::Straight) => "assets/vehicles/car_east_straight.png",
+                    (Direction::East, Route::Left) => "assets/vehicles/car_east_left.png",
+                    (Direction::East, Route::Right) => "assets/vehicles/car_east_right.png",
+                    (Direction::West, Route::Straight) => "assets/vehicles/car_west_straight.png",
+                    (Direction::West, Route::Left) => "assets/vehicles/car_west_left.png",
+                    (Direction::West, Route::Right) => "assets/vehicles/car_west_right.png",
+                };
+                vehicle_textures.insert(
+                    (direction, route),
+                    texture_creator
+                        .load_texture(Path::new(texture_path))
+                        .map_err(|e| format!("Failed to load {}: {}", texture_path, e))?,
+                );
+            }
+        }
 
         // Load traffic light textures
         let mut traffic_light_textures = HashMap::new();
@@ -161,7 +169,6 @@ impl<'a> TrafficSystem<'a> {
             traffic_light_textures,
         })
     }
-
     fn update_traffic_lights(&mut self) {
         // Count waiting vehicles per direction
         let mut vehicle_counts = [
@@ -750,8 +757,9 @@ impl<'a> TrafficSystem<'a> {
         for vehicle in &self.vehicles {
             let texture = self
                 .vehicle_textures
-                .get(&vehicle.direction)
+                .get(&(vehicle.direction, vehicle.route))
                 .ok_or("Failed to get vehicle texture")?;
+
             let (width, height) = match vehicle.direction {
                 Direction::North | Direction::South => (VEHICLE_WIDTH, VEHICLE_HEIGHT),
                 Direction::East | Direction::West => (VEHICLE_HEIGHT, VEHICLE_WIDTH),
