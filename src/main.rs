@@ -22,6 +22,7 @@ const VEHICLE_SPAWN_COOLDOWN: Duration = Duration::from_millis(1000);
 const TRAFFIC_LIGHT_POS_OFFSET: i32 = 20;
 const MAX_GREEN_TIME: Duration = Duration::from_secs(4);
 const TURN_OFFSET: i32 = 30;
+const NUMBER_OF_CARS_FOR_PRIORITY: u32 = 4;
 
 // Directions
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
@@ -218,7 +219,7 @@ impl<'a> TrafficSystem<'a> {
 
         // Check for priority condition: lane with >= 5 cars while another has < 3
         for &(dir, count) in &vehicle_counts {
-            if count >= 5 {
+            if count >= NUMBER_OF_CARS_FOR_PRIORITY {
                 // Check if there's a green light in another lane with < 3 cars
                 for light in &self.traffic_lights {
                     if light.state == TrafficLightState::Green && light.direction != dir {
