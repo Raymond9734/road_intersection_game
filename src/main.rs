@@ -1,18 +1,20 @@
 use rand::prelude::*;
 use sdl2::event::Event;
+use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+use sdl2::render::{Canvas, Texture, TextureCreator};
+use sdl2::video::{Window, WindowContext};
+use std::collections::HashMap;
+use std::path::Path;
 use std::time::{Duration, Instant};
-
 // Constants
 const WINDOW_WIDTH: u32 = 900;
 const WINDOW_HEIGHT: u32 = 800;
 const ROAD_WIDTH: u32 = 70;
-const VEHICLE_WIDTH: u32 = 30;
-const VEHICLE_HEIGHT: u32 = 30;
+const VEHICLE_WIDTH: u32 = 25;
+const VEHICLE_HEIGHT: u32 = 35;
 const VEHICLE_SPEED: i32 = 2;
 const TRAFFIC_LIGHT_SIZE: u32 = 20;
 const MIN_VEHICLE_DISTANCE: i32 = 50;
@@ -22,7 +24,7 @@ const MAX_GREEN_TIME: Duration = Duration::from_secs(4);
 const TURN_OFFSET: i32 = 30;
 
 // Directions
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 enum Direction {
     North,
     South,
@@ -39,12 +41,11 @@ enum Route {
 }
 
 // Traffic light state
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum TrafficLightState {
     Red,
     Green,
 }
-
 struct TrafficLight {
     position: Point,
     state: TrafficLightState,
@@ -56,19 +57,21 @@ struct Vehicle {
     position: Point,
     direction: Direction,
     route: Route,
-    color: Color,
+    // color: Color,
     has_turned: bool,
     has_passed_intersection: bool,
 }
 
-struct TrafficSystem {
+struct TrafficSystem<'a> {
     vehicles: Vec<Vehicle>,
     traffic_lights: Vec<TrafficLight>,
     last_spawn_time: Instant,
+    vehicle_textures: HashMap<Direction, Texture<'a>>,
+    traffic_light_textures: HashMap<TrafficLightState, Texture<'a>>,
 }
 
-impl TrafficSystem {
-    fn new() -> Self {
+impl<'a> TrafficSystem<'a> {
+    fn new(texture_creator: &'a TextureCreator<WindowContext>) -> Result<Self, String> {
         let traffic_lights = vec![
             TrafficLight {
                 position: Point::new(
@@ -108,11 +111,55 @@ impl TrafficSystem {
             },
         ];
 
-        TrafficSystem {
+        // Load vehicle textures
+        let mut vehicle_textures = HashMap::new();
+        vehicle_textures.insert(
+            Direction::North,
+            texture_creator
+                .load_texture(Path::new("assets/vehicles/car_north.png"))
+                .map_err(|e| e.to_string())?,
+        );
+        vehicle_textures.insert(
+            Direction::South,
+            texture_creator
+                .load_texture(Path::new("assets/vehicles/car_south.png"))
+                .map_err(|e| e.to_string())?,
+        );
+        vehicle_textures.insert(
+            Direction::East,
+            texture_creator
+                .load_texture(Path::new("assets/vehicles/car_east.png"))
+                .map_err(|e| e.to_string())?,
+        );
+        vehicle_textures.insert(
+            Direction::West,
+            texture_creator
+                .load_texture(Path::new("assets/vehicles/car_west.png"))
+                .map_err(|e| e.to_string())?,
+        );
+
+        // Load traffic light textures
+        let mut traffic_light_textures = HashMap::new();
+        traffic_light_textures.insert(
+            TrafficLightState::Red,
+            texture_creator
+                .load_texture(Path::new("assets/traffic_lights/red.png"))
+                .map_err(|e| e.to_string())?,
+        );
+        traffic_light_textures.insert(
+            TrafficLightState::Green,
+            texture_creator
+                .load_texture(Path::new("assets/traffic_lights/green.png"))
+                .map_err(|e| e.to_string())?,
+        );
+
+        Ok(TrafficSystem {
             vehicles: Vec::new(),
             traffic_lights,
             last_spawn_time: Instant::now(),
-        }
+            vehicle_textures,
+            traffic_light_textures,
+        })
     }
 
     fn update_traffic_lights(&mut self) {
@@ -284,11 +331,11 @@ impl TrafficSystem {
         let options = [Route::Straight, Route::Left, Route::Right];
         let route = options[rng.gen_range(0..3)];
 
-        let color = match route {
-            Route::Straight => Color::RGB(0, 0, 255),
-            Route::Left => Color::RGB(255, 0, 0),
-            Route::Right => Color::RGB(255, 255, 0),
-        };
+        // let color = match route {
+        //     Route::Straight => Color::RGB(0, 0, 255),
+        //     Route::Left => Color::RGB(255, 0, 0),
+        //     Route::Right => Color::RGB(255, 255, 0),
+        // };
 
         let position = match direction {
             Direction::North => Point::new(
@@ -313,7 +360,7 @@ impl TrafficSystem {
             position,
             direction,
             route,
-            color,
+            // color,
             has_turned: false,
             has_passed_intersection: false,
         };
@@ -655,6 +702,7 @@ impl TrafficSystem {
         canvas.set_draw_color(Color::RGB(50, 50, 50));
         canvas.clear();
 
+        // Draw roads
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.fill_rect(Rect::new(
             0,
@@ -669,6 +717,7 @@ impl TrafficSystem {
             WINDOW_HEIGHT,
         ))?;
 
+        // Draw road markings
         canvas.set_draw_color(Color::RGB(255, 255, 255));
         let horizontal_center = WINDOW_HEIGHT as i32 / 2;
         for x in (0..WINDOW_WIDTH as i32).step_by(30) {
@@ -679,32 +728,39 @@ impl TrafficSystem {
             canvas.fill_rect(Rect::new(vertical_center, y, 2, 15))?;
         }
 
+        // Render traffic lights
         for light in &self.traffic_lights {
-            let color = match light.state {
-                TrafficLightState::Red => Color::RGB(255, 0, 0),
-                TrafficLightState::Green => Color::RGB(0, 255, 0),
-            };
-            canvas.set_draw_color(color);
-            canvas.fill_rect(Rect::new(
-                light.position.x,
-                light.position.y,
-                TRAFFIC_LIGHT_SIZE,
-                TRAFFIC_LIGHT_SIZE,
-            ))?;
+            let texture = self
+                .traffic_light_textures
+                .get(&light.state)
+                .ok_or("Failed to get traffic light texture")?;
+            canvas.copy(
+                texture,
+                None,
+                Rect::new(
+                    light.position.x,
+                    light.position.y,
+                    TRAFFIC_LIGHT_SIZE,
+                    TRAFFIC_LIGHT_SIZE,
+                ),
+            )?;
         }
 
+        // Render vehicles
         for vehicle in &self.vehicles {
-            canvas.set_draw_color(vehicle.color);
+            let texture = self
+                .vehicle_textures
+                .get(&vehicle.direction)
+                .ok_or("Failed to get vehicle texture")?;
             let (width, height) = match vehicle.direction {
                 Direction::North | Direction::South => (VEHICLE_WIDTH, VEHICLE_HEIGHT),
                 Direction::East | Direction::West => (VEHICLE_HEIGHT, VEHICLE_WIDTH),
             };
-            canvas.fill_rect(Rect::new(
-                vehicle.position.x,
-                vehicle.position.y,
-                width,
-                height,
-            ))?;
+            canvas.copy(
+                texture,
+                None,
+                Rect::new(vehicle.position.x, vehicle.position.y, width, height),
+            )?;
         }
 
         canvas.present();
@@ -715,6 +771,7 @@ impl TrafficSystem {
 fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
+    let _image_context = sdl2::image::init(InitFlag::PNG)?;
 
     let window = video_subsystem
         .window(
@@ -727,9 +784,10 @@ fn main() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let texture_creator = canvas.texture_creator();
     let mut event_pump = sdl_context.event_pump()?;
 
-    let mut traffic_system = TrafficSystem::new();
+    let mut traffic_system = TrafficSystem::new(&texture_creator)?;
     let mut paused = false;
 
     'running: loop {
